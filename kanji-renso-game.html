@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>漢字連想ゲーム</title>
+<style>
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+  --bg: #EEE2C6;
+  --card-bg: #FFFDF7;
+  --card-border: #A87D46;
+  --card-shadow: #9C7440;
+  --text-primary: #241505;
+  --text-secondary: #4A3620;
+  --text-muted: #7A5B36;
+  --accent: #A82712;
+  --grid-color: rgba(150,105,50,0.22);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%;
+  overscroll-behavior: none;
+}
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text-primary);
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+  background-size: 20px 20px;
+  pointer-events: none;
+  z-index: 0;
+}
+#hanko {
+  position: fixed;
+  top: 14px; right: 16px;
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; color: var(--accent);
+  transform: rotate(-12deg);
+  opacity: 0.35;
+  z-index: 0;
+  pointer-events: none;
+}
+#app { max-width: 480px; margin: 0 auto; padding: 1.25rem 1rem 3rem; position: relative; z-index: 1; }
+.screen { display: none; }
+.screen.active { display: block; }
+h2 { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem; }
+p { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+/* カード */
+.card {
+  background: var(--card-bg);
+  border-radius: var(--border-radius-lg);
+  border: 1.5px solid var(--card-border);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+  box-shadow: 2px 2px 0 var(--card-shadow);
+}
+/* ボタン */
+button {
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 14px; font-weight: 500;
+  border-radius: var(--border-radius-md);
+  border: 1.5px solid var(--text-primary);
+  background: var(--card-bg);
+  color: var(--text-primary);
+  padding: 10px 20px;
+  transition: all 0.15s;
+}
+button:hover { background: #F0E8D8; }
+button:active { transform: scale(0.98); }
+button.primary {
+  background: var(--text-primary);
+  color: var(--bg);
+  border-color: var(--text-primary);
+  box-shadow: 2px 2px 0 #8C7355;
+}
+button.primary:hover { opacity: 0.85; }
+button:disabled { opacity: 0.35; cursor: not-allowed; }
+/* バッジ */
+.badge { display: inline-block; font-size: 11px; padding: 3px 10px; border-radius: var(--border-radius-md); font-weight: 500; }
+.badge-info { background: #B8D8F0; color: #0F3A66; }
+.badge-warning { background: #F5DC8C; color: #5C3600; }
+.badge-danger { background: #F5C4B4; color: #6E1206; }
+.badge-neutral { background: #E4D3AC; color: #4A3620; border: 1px solid var(--card-border); }
+.badge-bot { background: #DCB8F0; color: #4A0E80; border: 1px solid #A855D6; }
+/* タイマーバー */
+.timer-bar-wrap { background: #E8DCC8; border-radius: 4px; height: 6px; overflow: hidden; margin: 0.75rem 0; }
+.timer-bar { height: 6px; background: var(--text-primary); transition: width 1s linear; border-radius: 4px; }
+.timer-bar.warning { background: #BA7517; }
+.timer-bar.danger { background: var(--accent); }
+.timer-num { font-size: 20px; font-weight: 500; color: var(--text-muted); }
+/* プレイヤー行 */
+.player-row { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--card-border); gap: 10px; }
+.player-row:last-child { border-bottom: none; }
+.player-avatar { border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 500; flex-shrink: 0; }
+.player-name-input { flex: 1; background: transparent; border: none; border-bottom: 1px solid var(--card-border); font-size: 14px; color: var(--text-primary); padding: 4px 6px; font-family: var(--font-sans); }
+.player-name-input::placeholder { color: var(--text-muted); opacity: 0.55; }
+.player-name-input:focus::placeholder { opacity: 0; }
+.player-name-input:focus { outline: none; border-bottom-color: var(--text-primary); }
+.error-msg { font-size: 12px; color: var(--accent); margin-top: 6px; min-height: 18px; text-align: center; }
+/* 漢字入力 */
+.kanji-input-field {
+  width: 100%; font-size: 32px; text-align: center; padding: 14px;
+  border: 1.5px solid var(--card-border); border-radius: var(--border-radius-md);
+  background: var(--card-bg); color: var(--text-primary);
+  font-family: var(--font-sans);
+  box-shadow: inset 1px 1px 4px rgba(180,150,100,0.15);
+}
+.kanji-input-field.err { border-color: var(--accent); }
+.forbidden-chars { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-top: 6px; }
+/* ジャンルグリッド */
+.genre-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin-bottom: 1rem; }
+.genre-btn {
+  padding: 9px 8px; font-size: 13px;
+  border-radius: var(--border-radius-md);
+  border: 1.5px solid var(--card-border);
+  background: var(--card-bg); color: var(--text-muted);
+  cursor: pointer; text-align: center; transition: all 0.15s;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.genre-btn .check-icon { font-size: 13px; opacity: 0; transition: opacity 0.15s; color: var(--accent); }
+.genre-btn.selected { background: #F0E8D8; border-color: var(--text-primary); color: var(--text-primary); font-weight: 500; box-shadow: 1px 1px 0 #8C7355; }
+.genre-btn.selected .check-icon { opacity: 1; }
+.genre-btn:hover:not(.selected) { background: #FAF5EC; color: var(--text-primary); }
+.genre-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 8px; }
+.genre-label-text { font-size: 13px; font-weight: 600; color: var(--text-primary); flex-shrink: 0; }
+.genre-header-btns { display: flex; gap: 6px; flex-shrink: 0; }
+.genre-header-btns button { font-size: 11px; padding: 4px 10px; }
+/* カバー（お題表示エリア） */
+.cover {
+  background: #FAF5EC;
+  border: 1.5px solid var(--card-border);
+  border-radius: var(--border-radius-lg);
+  padding: 1.25rem 1rem 1rem; text-align: center; margin-bottom: 1rem;
+  box-shadow: 2px 2px 0 var(--card-shadow);
+}
+/* 漢字グリッド（回答フェーズ・リザルト） */
+.kanji-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin-bottom: 1rem; }
+.kanji-card {
+  background: var(--card-bg); border-radius: var(--border-radius-lg);
+  padding: 1rem; text-align: center;
+  border: 1.5px solid var(--card-border);
+  box-shadow: 2px 2px 0 var(--card-shadow);
+}
+.kanji-card.bot-card { border-color: #A855D6; background: #FAF5FF; box-shadow: 2px 2px 0 #A855D6; }
+.kanji-card .k-char { font-size: 48px; font-weight: 700; color: var(--text-primary); line-height: 1.1; margin-bottom: 4px; }
+.kanji-card .k-name { font-size: 12px; color: var(--text-muted); }
+.kanji-card .k-reason { font-size: 11px; color: #7C3AED; margin-top: 4px; font-style: italic; }
+/* ルビ */
+.topic-ruby-wrap { display: inline-flex; flex-direction: column; align-items: center; }
+.topic-ruby-rt { font-size: 11px; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 2px; }
+.genre-badge-row { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 8px; }
+/* ロールラベル */
+.role-label { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.5px; margin-bottom: 6px; text-transform: uppercase; }
+/* hint-timer-row */
+.hint-timer-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+/* bot */
+.bot-pass-card {
+  background: linear-gradient(135deg, #FAF5EC 0%, #F0E8D8 100%);
+  border: 1.5px solid var(--card-border);
+  border-radius: var(--border-radius-lg);
+  padding: 1.5rem; text-align: center; margin-bottom: 1rem;
+  box-shadow: 2px 2px 0 var(--card-shadow);
+}
+.bot-result-kanji { font-size: 64px; font-weight: 700; color: var(--text-primary); line-height: 1; margin-bottom: 8px; }
+.bot-result-reason {
+  font-size: 13px; color: #6B3A20; margin-top: 6px; font-style: italic;
+  background: rgba(192,49,26,0.07); border-radius: 8px; padding: 6px 12px; display: inline-block;
+  border: 1px solid rgba(192,49,26,0.15);
+}
+.bot-thinking { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 1.5rem 0; }
+.bot-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: botpulse 1.2s ease-in-out infinite; }
+.bot-dot:nth-child(2) { animation-delay: 0.2s; }
+.bot-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes botpulse { 0%,80%,100%{transform:scale(0.6);opacity:0.4} 40%{transform:scale(1);opacity:1} }
+/* ジャンルモーダル */
+#genre-card-wrapper { position: relative; }
+.modal-overlay {
+  display: none; position: absolute; inset: 0;
+  background: rgba(42,26,10,0.35);
+  z-index: 100; align-items: flex-start; justify-content: center;
+  border-radius: var(--border-radius-lg);
+}
+.modal-overlay.open { display: flex; }
+.modal-sheet {
+  background: var(--card-bg);
+  border-radius: var(--border-radius-lg);
+  width: 100%; max-height: 100%; overflow-y: auto;
+  padding: 1rem 1rem 1.25rem;
+  box-shadow: 4px 4px 0 var(--card-shadow);
+  border: 1.5px solid var(--card-border);
+}
+.modal-handle { width: 36px; height: 4px; background: var(--card-border); border-radius: 2px; margin: 0 auto 0.75rem; }
+.solo-genre-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+.solo-genre-btn {
+  padding: 10px 8px; font-size: 13px; font-weight: 500;
+  border-radius: var(--border-radius-md); border: 1.5px solid var(--card-border);
+  background: #FAF5EC; color: var(--text-primary);
+  cursor: pointer; text-align: center; transition: all 0.15s;
+}
+.solo-genre-btn:hover { background: var(--text-primary); color: var(--bg); }
+/* パスフォント */
+.pass-icon { font-size: 48px; margin-bottom: 12px; display: block; }
+/* 結果画面 */
+.answer-topic { font-size: 32px; font-weight: 700; text-align: center; color: var(--text-primary); padding: 0.5rem 0; letter-spacing: 2px; }
+/* シャッフルボタン */
+#btn-shuffle { width: 100%; margin-bottom: 8px; background: #F3D9CE; border-color: #C68F73; color: #7A2812; }
+#btn-shuffle:hover { background: #EDC7B8; }
+/* 結果エフェクト */
+.result-effect { position: absolute; top: -30px; right: -52px; width: 84px; height: 72px; display: none; pointer-events: none; }
+.result-effect.show { display: block; }
+.result-effect svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.droop-bar {
+  transform-origin: 50% 0%;
+  animation: barDroop 0.65s cubic-bezier(.36,1.4,.5,1) both;
+}
+.droop-bar:nth-child(1){animation-delay:.02s}
+.droop-bar:nth-child(2){animation-delay:.09s}
+.droop-bar:nth-child(3){animation-delay:.16s}
+.droop-bar:nth-child(4){animation-delay:.23s}
+.droop-bar:nth-child(5){animation-delay:.30s}
+.droop-bar:nth-child(6){animation-delay:.37s}
+.droop-bar:nth-child(7){animation-delay:.44s}
+@keyframes barDroop {
+  0% { transform: scaleY(0); opacity: 0; }
+  55% { transform: scaleY(1); opacity: 1; }
+  72% { transform: scaleY(0.93); }
+  100% { transform: scaleY(1); opacity: 1; }
+}
+.sun-ray {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: rayShine .55s cubic-bezier(.34,1.56,.64,1) both;
+}
+.sun-ray:nth-child(1){animation-delay:.01s}
+.sun-ray:nth-child(2){animation-delay:.04s}
+.sun-ray:nth-child(3){animation-delay:.07s}
+.sun-ray:nth-child(4){animation-delay:.10s}
+.sun-ray:nth-child(5){animation-delay:.13s}
+.sun-ray:nth-child(6){animation-delay:.16s}
+.sun-ray:nth-child(7){animation-delay:.19s}
+.sun-ray:nth-child(8){animation-delay:.22s}
+.sun-ray:nth-child(9){animation-delay:.25s}
+.sun-ray:nth-child(10){animation-delay:.28s}
+.sun-ray:nth-child(11){animation-delay:.31s}
+.sun-ray:nth-child(12){animation-delay:.34s}
+@keyframes rayShine {
+  0% { transform: scale(0.15); opacity: 0; }
+  65% { transform: scale(1.18); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.sun-core {
+  animation: coreGlow .45s ease-out .05s both, corePulse 1.6s ease-in-out .55s infinite;
+}
+@keyframes coreGlow {
+  0% { transform: scale(0.3); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes corePulse {
+  0%,100% { filter: drop-shadow(0 0 4px rgba(184,19,15,0.6)); }
+  50% { filter: drop-shadow(0 0 12px rgba(184,19,15,0.9)); }
+}
+</style>
+</head>
+<body>
+<div id="hanko">遊</div>
+<div id="app">
+
+<!-- タイトル -->
+<div id="s-title" class="screen active">
+  <div style="text-align:center;padding:2.5rem 0 1rem;">
+    <!-- カードスタック -->
+    <div style="position:relative;width:150px;height:170px;margin:0 auto 1.25rem;">
+      <div style="position:absolute;top:8px;left:8px;width:150px;height:170px;background:#EDE4CE;border:1.5px solid #B8987A;border-radius:8px;"></div>
+      <div style="position:absolute;top:4px;left:4px;width:150px;height:170px;background:#F4ECD8;border:1.5px solid #C8A878;border-radius:8px;"></div>
+      <div style="position:absolute;top:0;left:0;width:150px;height:170px;background:#fff;border:2px solid #2A1A0A;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;box-shadow:3px 3px 0 #8C7355;">
+        <div style="font-size:72px;font-weight:700;color:#2A1A0A;line-height:1;">漢</div>
+        <div style="font-size:12px;font-weight:600;color:#2A1A0A;letter-spacing:3px;border-top:1px solid #C8A878;padding-top:6px;width:100%;text-align:center;">漢字連想</div>
+      </div>
+    </div>
+    <div style="width:100%;height:1.5px;background:var(--accent);opacity:0.4;margin-bottom:10px;"></div>
+    <p style="margin-bottom:1.5rem;font-size:13px;color:var(--text-muted);letter-spacing:1px;">漢字1文字でお題を伝える協力ゲーム</p>
+    <button class="primary" onclick="showScreen('s-setup')" style="width:100%;margin-bottom:8px;padding:14px;letter-spacing:2px;">はじめる</button>
+    <button onclick="showScreen('s-rules')" style="width:100%;padding:12px;letter-spacing:1px;">遊び方</button>
+  </div>
+</div>
+
+<!-- ルール -->
+<div id="s-rules" class="screen">
+  <h2 style="margin-bottom:1rem;">遊び方</h2>
+  <div class="card"><p style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:6px;">① 役割を決める</p><p>1人が「回答者」、残りが「出題者」になります。毎ラウンド役割がローテーションします。</p></div>
+  <div class="card"><p style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:6px;">② お題を確認する</p><p>出題者はスマホを受け取り、お題を確認。回答者には見せないでください。</p></div>
+  <div class="card"><p style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:6px;">③ 漢字1文字で伝える</p><p>出題者は制限時間内にお題を連想させる漢字を1文字入力します。AIbotも参加できます！</p></div>
+  <div class="card" style="border-color:var(--accent);"><p style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:6px;">⚠ 禁止ルール</p><p>お題に直接含まれている漢字を書いてはいけません。</p></div>
+  <div class="card"><p style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:6px;">④ 回答者が答える</p><p>ジャンルヒントとみんなの漢字を見て、お題を制限時間内に答えましょう！</p></div>
+  <button onclick="showScreen('s-title')" style="width:100%;margin-top:0.5rem;">← もどる</button>
+</div>
+
+<!-- セットアップ -->
+<div id="s-setup" class="screen">
+  <button onclick="showScreen('s-title')" style="margin-bottom:0.75rem;padding:8px 16px;font-size:13px;">← もどる</button>
+  <h2 style="margin-bottom:0.5rem;">プレイヤー設定</h2>
+  <p style="margin-bottom:1rem;">プレイヤーを登録してください（人間2〜6人）</p>
+  <div class="card" style="margin-bottom:1rem;">
+    <div id="player-list"></div>
+    <div class="btn-row" style="margin-top:0.75rem;">
+      <button onclick="addPlayer()" id="btn-add">＋ 追加</button>
+      <button onclick="removePlayer()" id="btn-remove">－ 削除</button>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:1rem;border-color:#A855D6;">
+    <p style="font-size:13px;font-weight:600;color:#4A0E80;margin-bottom:6px;">🤖 AI出題者bot</p>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">botはお題・ジャンルから連想辞書を使って漢字を選びます。</p>
+    <div id="bot-list"></div>
+    <div class="btn-row" style="margin-top:0.75rem;">
+      <button onclick="addBot()" id="btn-add-bot" style="border-color:#A855D6;color:#4A0E80;">🤖 botを追加</button>
+      <button onclick="removeBot()" id="btn-remove-bot" disabled>botを削除</button>
+    </div>
+  </div>
+  <button class="primary" onclick="goToGameSettings()" style="width:100%;margin-top:0.5rem;padding:14px;letter-spacing:2px;">次へ →</button>
+</div>
+
+<!-- ゲーム設定 -->
+<div id="s-setup-game" class="screen">
+  <button onclick="showScreen('s-setup')" style="margin-bottom:0.75rem;padding:8px 16px;font-size:13px;">← もどる</button>
+  <h2 style="margin-bottom:0.5rem;">ゲーム設定</h2>
+  <p style="margin-bottom:1rem;">お題のジャンルと制限時間を設定してください</p>
+  <div class="card" style="margin-bottom:1rem;">
+    <p style="font-size:13px;font-weight:600;margin-bottom:8px;">最初の回答者</p>
+    <div class="genre-grid" id="first-answerer-grid"></div>
+  </div>
+  <div id="genre-card-wrapper">
+    <div class="card" style="margin-bottom:1rem;">
+      <div class="genre-header-row">
+        <span class="genre-label-text">お題のジャンル</span>
+        <div class="genre-header-btns">
+          <button onclick="toggleAllGenres()" id="btn-genre-all"></button>
+          <button onclick="openSoloModal()">1つだけ</button>
+        </div>
+      </div>
+      <div class="genre-grid" id="genre-grid"></div>
+    </div>
+    <div class="modal-overlay" id="solo-modal" onclick="handleModalClick(event)">
+      <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+          <h2 style="font-size:15px;margin:0;">1つだけ選ぶ</h2>
+          <button onclick="closeSoloModal()" style="padding:4px 10px;font-size:12px;">✕ 閉じる</button>
+        </div>
+        <div class="solo-genre-grid" id="solo-genre-grid"></div>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:1rem;">
+    <p style="font-size:13px;font-weight:600;margin-bottom:8px;">出題者の制限時間（1人あたり）</p>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <input type="range" min="10" max="60" step="5" value="30" id="hint-timer-slider" style="flex:1;" oninput="document.getElementById('hint-timer-val').textContent=this.value+'秒'"/>
+      <span id="hint-timer-val" style="font-size:14px;font-weight:500;min-width:40px;text-align:right;">30秒</span>
+    </div>
+  </div>
+  <div class="card">
+    <p style="font-size:13px;font-weight:600;margin-bottom:8px;">回答者の制限時間</p>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <input type="range" min="15" max="120" step="15" value="60" id="timer-slider" style="flex:1;" oninput="document.getElementById('timer-val').textContent=this.value+'秒'"/>
+      <span id="timer-val" style="font-size:14px;font-weight:500;min-width:40px;text-align:right;">60秒</span>
+    </div>
+  </div>
+  <button class="primary" onclick="startGame()" style="width:100%;margin-top:0.5rem;padding:14px;letter-spacing:2px;">ゲーム開始 →</button>
+</div>
+
+<!-- ラウンド開始 -->
+<div id="s-round-start" class="screen">
+  <h2 style="margin-bottom:0.25rem;" id="rs-round-label"></h2>
+  <p style="margin-bottom:1rem;">今ラウンドの役割です</p>
+  <div class="card" style="margin-bottom:1rem;">
+    <div style="margin-bottom:1rem;">
+      <div class="role-label">回答者</div>
+      <div id="rs-answerer" style="display:flex;align-items:center;gap:10px;padding:8px 0;"></div>
+    </div>
+    <div style="border-top:1px dashed var(--card-border);padding-top:1rem;">
+      <div class="role-label" style="margin-bottom:8px;">出題者（順番）</div>
+      <div id="rs-questioners"></div>
+    </div>
+  </div>
+  <button class="primary" onclick="beginRound()" style="width:100%;padding:14px;letter-spacing:1px;">ゲームスタート →</button>
+</div>
+
+<!-- パス -->
+<div id="s-pass" class="screen">
+  <div style="text-align:center;padding:2.5rem 0 1rem;">
+    <span class="pass-icon">📲</span>
+    <h2 id="pass-next" style="margin-bottom:0.5rem;"></h2>
+    <p id="pass-desc" style="margin-bottom:1.5rem;"></p>
+    <button class="primary" onclick="continuePass()" style="width:100%;padding:14px;" id="pass-btn">次へ</button>
+  </div>
+</div>
+
+<!-- botターン -->
+<div id="s-bot-turn" class="screen">
+  <div id="bt-badge" style="margin-bottom:0.75rem;"></div>
+  <h2 id="bt-name" style="margin-bottom:1rem;"></h2>
+  <div class="bot-pass-card">
+    <div style="font-size:36px;margin-bottom:8px;">🤖</div>
+    <p style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:12px;" id="bt-status"></p>
+    <div class="bot-thinking" id="bt-thinking">
+      <div class="bot-dot"></div><div class="bot-dot"></div><div class="bot-dot"></div>
+    </div>
+    <div id="bt-result-area" style="display:none;">
+      <div class="bot-result-kanji" id="bt-kanji"></div>
+      <div class="bot-result-reason" id="bt-reason"></div>
+    </div>
+  </div>
+  <button class="primary" id="bt-next-btn" style="width:100%;display:none;padding:14px;">次へ</button>
+</div>
+
+<!-- 出題者ターン -->
+<div id="s-hint-turn" class="screen">
+  <div id="ht-badge" style="margin-bottom:0.75rem;"></div>
+  <h2 id="ht-name" style="margin-bottom:0.25rem;"></h2>
+  <p style="margin-bottom:0.75rem;">漢字1文字でお題を連想させてください</p>
+  <div class="hint-timer-row">
+    <span style="font-size:12px;color:var(--text-muted);">制限時間</span>
+    <span id="ht-timer-num" class="timer-num" style="font-size:16px;"></span>
+  </div>
+  <div class="timer-bar-wrap" style="margin-top:0;margin-bottom:0.75rem;"><div class="timer-bar" id="ht-bar"></div></div>
+  <div class="cover">
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">お題</p>
+    <div id="ht-topic-display" style="margin-bottom:4px;"></div>
+    <div class="genre-badge-row">
+      <span style="font-size:11px;color:var(--text-muted);">ジャンル</span>
+      <span id="ht-genre-badge" class="badge badge-neutral"></span>
+    </div>
+    <div class="forbidden-chars" id="ht-forbidden"></div>
+    <div id="ht-reload-wrap" style="margin-top:10px;">
+      <button onclick="reloadTopic()" style="font-size:12px;padding:6px 14px;color:var(--text-muted);border-color:var(--card-border);">↺ お題を変える</button>
+    </div>
+  </div>
+  <input type="text" id="kanji-input" maxlength="1" placeholder="漢" class="kanji-input-field"/>
+  <button class="primary" onclick="submitKanji()" style="width:100%;padding:14px;margin-top:8px;font-size:16px;letter-spacing:2px;">確定</button>
+  <div class="error-msg" id="kanji-error"></div>
+  <p style="font-size:12px;color:var(--text-muted);margin-top:6px;" id="ht-progress"></p>
+</div>
+
+<!-- 回答フェーズ -->
+<div id="s-answer" class="screen">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+    <div>
+      <h2 style="margin-bottom:2px;">みんなの漢字</h2>
+      <p style="font-size:12px;" id="ans-answerer-label"></p>
+    </div>
+    <span id="ans-timer" class="timer-num" style="background:#fff;border:1.5px solid var(--card-border);border-radius:var(--border-radius-md);padding:4px 12px;box-shadow:2px 2px 0 var(--card-shadow);min-width:72px;text-align:center;display:inline-block;"></span>
+  </div>
+  <div class="timer-bar-wrap"><div class="timer-bar" id="ans-bar"></div></div>
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:0.75rem;">
+    <span style="font-size:12px;color:var(--text-muted);">ヒント</span>
+    <span id="ans-genre-badge" class="badge badge-neutral"></span>
+  </div>
+  <div class="kanji-grid" id="kanji-grid-display"></div>
+  <div class="btn-row">
+    <button class="primary" onclick="judgeResult(true)" style="flex:1;">正解！</button>
+    <button onclick="judgeResult(false)" style="flex:1;">不正解</button>
+  </div>
+</div>
+
+<!-- 時間切れ -->
+<div id="s-timeup" class="screen">
+  <div style="text-align:center;padding:3.5rem 0 1rem;">
+    <div style="font-size:52px;margin-bottom:10px;">⏱️</div>
+    <h2 style="font-size:26px;margin-bottom:6px;">時間がきれました</h2>
+    <p style="margin-bottom:2rem;">残念、制限時間内に答えられませんでした</p>
+    <button class="primary" onclick="finishTimeup()" style="width:100%;padding:14px;letter-spacing:1px;">答えを見る →</button>
+  </div>
+</div>
+
+<!-- 結果 -->
+<div id="s-result" class="screen">
+  <div style="text-align:center;padding:1.5rem 0 0.75rem;">
+    <div style="position:relative;display:inline-block;">
+      <h2 id="result-title" style="font-family:var(--font-sans);font-size:64px;font-weight:900;letter-spacing:6px;margin:0;color:#D6241B;-webkit-text-stroke:3px #FFFFFF;paint-order:stroke fill;line-height:1.1;"></h2>
+      <div id="effect-correct" class="result-effect">
+        <svg viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
+          <g id="sun-rays-g">
+            <g transform="rotate(0 80 80)"><rect class="sun-ray" x="74" y="10" width="12" height="28" rx="6" fill="#D6241B" stroke="#FFFFFF" stroke-width="2.5"/></g>
+            <g transform="rotate(30 80 80)"><rect class="sun-ray" x="74" y="10" width="12" height="28" rx="6" fill="#D6241B" stroke="#FFFFFF" stroke-width="2.5"/></g>
+            <g transform="rotate(60 80 80)"><rect class="sun-ray" x="74" y="10" width="12" height="28" rx="6" fill="#D6241B" stroke="#FFFFFF" stroke-width="2.5"/></g>
+            <g transform="rotate(90 80 80)"><rect class="sun-ray" x="74" y="10" width="12" height="28" rx="6" fill="#D6241B" stroke="#FFFFFF" stroke-width="2.5"/></g>
+            <g transform="rotate(120 80 80)"><rect class="sun-ray" x="74" y="10" width="12" height="28" rx="6" fill="#D6241B" stroke="#FFFFFF" stroke-width="2.5"/></g>
+            <g transform="rotate(150 80 80)"><rect class="sun-ray" x="74" y="10" width="12" height="28" rx="6" fill="#D6241B" stroke="#FFFFFF" stroke-width="2.5"/></g>
+            <g transform="rotate(180 80 80)"><rect class="sun-ray" x="74" y="10" width="12" height="28" rx="6" fill="#D6241B" stroke="#FFFFFF" stroke-width="2.5"/></g>
+            <g transform="rotate(210 80 80)"><rect class="sun-ray" x="74" y="10" width="12" height="28" rx="6" fill="#D6241B" stroke="#FFFFFF" stroke-width="2.5"/></g>
+            <g transform="rotate(240 80 80)"><rect class="sun-ray" x="74" y="10" width="12" height="28" rx="6" fill="#D6241B" stroke="#FFFFFF" stroke-width="2.5"/></g>
+            <g transform="rotate(270 80 80)"><rect class="sun-ray" x="74" y="10" width="12" height="28" rx="6" fill="#D6241B" stroke="#FFFFFF" stroke-width="2.5"/></g>
+            <g transform="rotate(300 80 80)"><rect class="sun-ray" x="74" y="10" width="12" height="28" rx="6" fill="#D6241B" stroke="#FFFFFF" stroke-width="2.5"/></g>
+            <g transform="rotate(330 80 80)"><rect class="sun-ray" x="74" y="10" width="12" height="28" rx="6" fill="#D6241B" stroke="#FFFFFF" stroke-width="2.5"/></g>
+          </g>
+          <circle class="sun-core" cx="80" cy="80" r="28" fill="#B8130F" stroke="#FFFFFF" stroke-width="3.5"/>
+        </svg>
+      </div>
+      <div id="effect-incorrect" class="result-effect">
+        <svg viewBox="0 0 200 150" xmlns="http://www.w3.org/2000/svg">
+          <g id="droop-bars-g">
+            <rect class="droop-bar" x="9" y="4" width="20" height="134" rx="10" fill="#0F1EB0" stroke="#FFFFFF" stroke-width="3.5"/>
+            <rect class="droop-bar" x="37" y="4" width="20" height="94" rx="10" fill="#0F1EB0" stroke="#FFFFFF" stroke-width="3.5"/>
+            <rect class="droop-bar" x="65" y="4" width="20" height="114" rx="10" fill="#0F1EB0" stroke="#FFFFFF" stroke-width="3.5"/>
+            <rect class="droop-bar" x="93" y="4" width="20" height="64" rx="10" fill="#0F1EB0" stroke="#FFFFFF" stroke-width="3.5"/>
+            <rect class="droop-bar" x="121" y="4" width="20" height="104" rx="10" fill="#0F1EB0" stroke="#FFFFFF" stroke-width="3.5"/>
+            <rect class="droop-bar" x="149" y="4" width="20" height="84" rx="10" fill="#0F1EB0" stroke="#FFFFFF" stroke-width="3.5"/>
+            <rect class="droop-bar" x="171" y="4" width="20" height="144" rx="10" fill="#0F1EB0" stroke="#FFFFFF" stroke-width="3.5"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="text-align:center;margin-bottom:1rem;">
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">お題</p>
+    <div id="result-topic-display" style="padding:0.5rem 0 0.25rem;"></div>
+    <p style="font-size:12px;color:var(--text-muted);margin-top:4px;" id="result-answerer-label"></p>
+  </div>
+  <div class="card" style="margin-bottom:1rem;">
+    <p style="font-size:13px;font-weight:600;margin-bottom:10px;">みんなのヒント</p>
+    <div class="kanji-grid" id="result-kanji-grid"></div>
+  </div>
+  <div style="display:flex;gap:10px;margin-bottom:1rem;">
+    <div class="card" style="flex:1;text-align:center;margin-bottom:0;padding:0.75rem;">
+      <p style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">正解数</p>
+      <p id="result-correct-count" style="font-size:22px;font-weight:700;color:var(--text-primary);">0</p>
+    </div>
+    <div class="card" style="flex:1;text-align:center;margin-bottom:0;padding:0.75rem;">
+      <p style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">連続正解数</p>
+      <p id="result-streak-count" style="font-size:22px;font-weight:700;color:var(--accent);">0</p>
+    </div>
+  </div>
+  <button id="btn-shuffle" onclick="shufflePlayers()"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px;"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>プレイヤー順をシャッフル</button>
+  <div id="shuffle-result" style="display:none;font-size:13px;color:var(--text-muted);text-align:center;margin-bottom:10px;"></div>
+  <div class="btn-row">
+    <button class="primary" onclick="nextRound()" style="flex:1;">次のラウンド</button>
+    <button onclick="buildFirstAnswererGrid();showScreen('s-setup-game')" style="flex:1;">ゲーム設定に戻る</button>
+  </div>
+  <button onclick="showScreen('s-title')" style="width:100%;margin-top:8px;">タイトルへ</button>
+</div>
+
+</div><!-- /app -->
+<script>
+const ALL_TOPICS={"自然・地形":[{w:"富士山",r:"ふじさん"},{w:"海岸",r:"かいがん"},{w:"森林",r:"しんりん"},{w:"砂漠",r:"さばく"},{w:"滝",r:"たき"},{w:"虹",r:"にじ"},{w:"雷",r:"かみなり"},{w:"台風",r:"たいふう"},{w:"梅雨",r:"つゆ"},{w:"初雪",r:"はつゆき"},{w:"朝焼け",r:"あさやけ"},{w:"夕陽",r:"ゆうひ"},{w:"太陽",r:"たいよう"},{w:"月",r:"つき"},{w:"地球",r:"ちきゅう"},{w:"銀河",r:"ぎんが"},{w:"彗星",r:"すいせい"},{w:"流星",r:"りゅうせい"},{w:"オーロラ"},{w:"火山",r:"かざん"},{w:"草原",r:"そうげん"},{w:"湖",r:"みずうみ"},{w:"島",r:"しま"},{w:"洞窟",r:"どうくつ"},{w:"ジャングル"},{w:"サバンナ"},{w:"氷河",r:"ひょうが"},{w:"珊瑚礁",r:"さんごしょう"}],"動物":[{w:"狐",r:"きつね"},{w:"鷹",r:"たか"},{w:"鯉",r:"こい"},{w:"蛍",r:"ほたる"},{w:"梟",r:"ふくろう"},{w:"猫",r:"ねこ"},{w:"犬",r:"いぬ"},{w:"象",r:"ぞう"},{w:"熊",r:"くま"},{w:"狼",r:"おおかみ"},{w:"鹿",r:"しか"},{w:"馬",r:"うま"},{w:"牛",r:"うし"},{w:"豚",r:"ぶた"},{w:"羊",r:"ひつじ"},{w:"蛇",r:"へび"},{w:"亀",r:"かめ"},{w:"蛙",r:"かえる"},{w:"蝶",r:"ちょう"},{w:"鷲",r:"わし"},{w:"鶴",r:"つる"},{w:"白鳥",r:"はくちょう"},{w:"虎",r:"とら"},{w:"ライオン",fk:"獅子"},{w:"パンダ"},{w:"イルカ",fk:"海豚"},{w:"クジラ",fk:"鯨"},{w:"コアラ"},{w:"フラミンゴ"},{w:"チーター"},{w:"ゴリラ"},{w:"ペンギン"},{w:"カメレオン"}],"食べ物":[{w:"寿司",r:"すし"},{w:"天ぷら",r:"てんぷら"},{w:"焼肉",r:"やきにく"},{w:"刺身",r:"さしみ"},{w:"うどん"},{w:"そば",fk:"蕎麦"},{w:"おにぎり"},{w:"ラーメン"},{w:"カレー"},{w:"ピザ"},{w:"ハンバーガー"},{w:"パスタ"},{w:"たこ焼き",r:"たこやき"},{w:"お好み焼き",r:"おこのみやき"},{w:"ケーキ"},{w:"アイスクリーム"},{w:"チョコレート"},{w:"プリン"},{w:"バーベキュー"},{w:"クレープ"},{w:"タコス"},{w:"パエリア"},{w:"マカロン"},{w:"ティラミス"},{w:"バナナ"},{w:"ぶどう",fk:"葡萄"},{w:"いちご",fk:"苺"},{w:"メロン"},{w:"マンゴー"}],"スポーツ":[{w:"サッカー"},{w:"野球",r:"やきゅう"},{w:"バスケ"},{w:"テニス"},{w:"水泳",r:"すいえい"},{w:"柔道",r:"じゅうどう"},{w:"剣道",r:"けんどう"},{w:"体操",r:"たいそう"},{w:"マラソン"},{w:"スキー"},{w:"サーフィン"},{w:"ボクシング"},{w:"ゴルフ"},{w:"卓球",r:"たっきゅう"},{w:"陸上",r:"りくじょう"},{w:"相撲",r:"すもう"},{w:"スケートボード"},{w:"ラグビー"},{w:"クライミング"},{w:"バドミントン"},{w:"アーチェリー"},{w:"フィギュアスケート"},{w:"トライアスロン"},{w:"ボウリング"},{w:"スノーボード"},{w:"フェンシング"},{w:"ダーツ"}],"乗り物":[{w:"自転車",r:"じてんしゃ"},{w:"新幹線",r:"しんかんせん"},{w:"飛行機",r:"ひこうき"},{w:"帆船",r:"はんせん"},{w:"ロケット"},{w:"熱気球",r:"ねつきゅう"},{w:"馬車",r:"ばしゃ"},{w:"潜水艦",r:"せんすいかん"},{w:"バス"},{w:"タクシー"},{w:"バイク"},{w:"トラック"},{w:"ヘリコプター"},{w:"電車",r:"でんしゃ"},{w:"宇宙船",r:"うちゅうせん"},{w:"ケーブルカー"},{w:"モノレール"},{w:"ゴンドラ"},{w:"スペースシャトル"},{w:"リムジン"}],"職業":[{w:"医者",r:"いしゃ"},{w:"料理人",r:"りょうりにん"},{w:"大工",r:"だいく"},{w:"消防士",r:"しょうぼうし"},{w:"警察官",r:"けいさつかん"},{w:"農家",r:"のうか"},{w:"宇宙飛行士",r:"うちゅうひこうし"},{w:"先生",r:"せんせい"},{w:"画家",r:"がか"},{w:"作家",r:"さっか"},{w:"探偵",r:"たんてい"},{w:"弁護士",r:"べんごし"},{w:"看護師",r:"かんごし"},{w:"漁師",r:"りょうし"},{w:"俳優",r:"はいゆう"},{w:"侍",r:"さむらい"},{w:"忍者",r:"にんじゃ"},{w:"騎士",r:"きし"},{w:"海賊",r:"かいぞく"},{w:"パイロット"},{w:"デザイナー"},{w:"プログラマー"},{w:"シェフ"},{w:"アニメーター"},{w:"ユーチューバー"},{w:"フォトグラファー"}],"場所・施設":[{w:"学校",r:"がっこう"},{w:"病院",r:"びょういん"},{w:"図書館",r:"としょかん"},{w:"駅",r:"えき"},{w:"空港",r:"くうこう"},{w:"神社",r:"じんじゃ"},{w:"寺",r:"てら"},{w:"城",r:"しろ"},{w:"温泉",r:"おんせん"},{w:"遊園地",r:"ゆうえんち"},{w:"水族館",r:"すいぞくかん"},{w:"動物園",r:"どうぶつえん"},{w:"美術館",r:"びじゅつかん"},{w:"映画館",r:"えいがかん"},{w:"スタジアム"},{w:"コンビニ"},{w:"プラネタリウム"},{w:"カジノ"},{w:"スパ"},{w:"マリーナ"}],"感情・概念":[{w:"愛",r:"あい"},{w:"夢",r:"ゆめ"},{w:"希望",r:"きぼう"},{w:"勇気",r:"ゆうき"},{w:"友情",r:"ゆうじょう"},{w:"平和",r:"へいわ"},{w:"自由",r:"じゆう"},{w:"真実",r:"しんじつ"},{w:"幸福",r:"こうふく"},{w:"孤独",r:"こどく"},{w:"怒り",r:"いかり"},{w:"悲しみ",r:"かなしみ"},{w:"喜び",r:"よろこび"},{w:"恐怖",r:"きょうふ"},{w:"感謝",r:"かんしゃ"},{w:"誇り",r:"ほこり"},{w:"絆",r:"きずな"},{w:"正義",r:"せいぎ"},{w:"勝利",r:"しょうり"},{w:"敗北",r:"はいぼく"},{w:"ノスタルジア"},{w:"トラウマ"},{w:"カリスマ"},{w:"ユートピア"}],"季節・行事":[{w:"花見",r:"はなみ"},{w:"夏祭り",r:"なつまつり"},{w:"花火",r:"はなび"},{w:"紅葉",r:"こうよう"},{w:"初雪",r:"はつゆき"},{w:"お正月",r:"おしょうがつ"},{w:"クリスマス"},{w:"ハロウィン"},{w:"誕生日",r:"たんじょうび"},{w:"卒業",r:"そつぎょう"},{w:"結婚",r:"けっこん"},{w:"運動会",r:"うんどうかい"},{w:"受験",r:"じゅけん"},{w:"七夕",r:"たなばた"},{w:"節分",r:"せつぶん"},{w:"お盆",r:"おぼん"},{w:"バレンタイン"},{w:"イースター"},{w:"カーニバル"}],"趣味・活動":[{w:"読書",r:"どくしょ"},{w:"音楽",r:"おんがく"},{w:"料理",r:"りょうり"},{w:"睡眠",r:"すいみん"},{w:"掃除",r:"そうじ"},{w:"ゲーム"},{w:"映画",r:"えいが"},{w:"写真",r:"しゃしん"},{w:"踊り",r:"おどり"},{w:"釣り",r:"つり"},{w:"登山",r:"とざん"},{w:"散歩",r:"さんぽ"},{w:"キャンプ"},{w:"旅行",r:"りょこう"},{w:"ガーデニング"},{w:"DIY"},{w:"コスプレ"},{w:"ボランティア"},{w:"ポッドキャスト"},{w:"アクアリウム"}],"植物・花":[{w:"桜",r:"さくら"},{w:"バラ",fk:"薔薇"},{w:"ひまわり",fk:"向日葵"},{w:"チューリップ"},{w:"梅",r:"うめ"},{w:"蓮",r:"はす"},{w:"竹",r:"たけ"},{w:"松",r:"まつ"},{w:"紅葉",r:"もみじ"},{w:"朝顔",r:"あさがお"},{w:"菊",r:"きく"},{w:"藤",r:"ふじ"},{w:"アジサイ",fk:"紫陽花"},{w:"コスモス",fk:"秋桜"},{w:"ラベンダー"},{w:"サボテン",fk:"仙人掌"},{w:"クローバー"}],"テクノロジー":[{w:"コンピュータ"},{w:"スマートフォン"},{w:"ロボット"},{w:"人工知能",r:"じんこうちのう"},{w:"インターネット"},{w:"テレビ"},{w:"カメラ"},{w:"時計",r:"とけい"},{w:"冷蔵庫",r:"れいぞうこ"},{w:"洗濯機",r:"せんたくき"},{w:"ドローン"},{w:"衛星",r:"えいせい"},{w:"ブロックチェーン"},{w:"メタバース"},{w:"バーチャルリアリティ"},{w:"クラウド"},{w:"3Dプリンター"},{w:"スマートウォッチ"},{w:"量子コンピュータ",r:"りょうしコンピュータ"}],"国・地域":[{w:"日本",r:"にほん"},{w:"中国",r:"ちゅうごく"},{w:"韓国",r:"かんこく"},{w:"アメリカ"},{w:"フランス"},{w:"イギリス"},{w:"ドイツ"},{w:"イタリア"},{w:"スペイン"},{w:"ブラジル"},{w:"インド"},{w:"エジプト"},{w:"ロシア"},{w:"カナダ"},{w:"オーストラリア"},{w:"メキシコ"},{w:"ギリシャ"},{w:"北海道",r:"ほっかいどう"},{w:"沖縄",r:"おきなわ"},{w:"京都",r:"きょうと"},{w:"トルコ"},{w:"タイ"},{w:"ベトナム"},{w:"ポルトガル"},{w:"ノルウェー"},{w:"ニュージーランド"},{w:"ペルー"},{w:"ケニア"}],"偉人":[{w:"伊藤博文",r:"いとうひろぶみ"},{w:"坂本龍馬",r:"さかもとりょうま"},{w:"織田信長",r:"おだのぶなが"},{w:"豊臣秀吉",r:"とよとみひでよし"},{w:"徳川家康",r:"とくがわいえやす"},{w:"源頼朝",r:"みなもとのよりとも"},{w:"聖徳太子",r:"しょうとくたいし"},{w:"紫式部",r:"むらさきしきぶ"},{w:"夏目漱石",r:"なつめそうせき"},{w:"野口英世",r:"のぐちひでよ"},{w:"本田宗一郎",r:"ほんだそういちろう"},{w:"ナポレオン"},{w:"シェイクスピア"},{w:"ダ・ヴィンチ"},{w:"アインシュタイン"},{w:"モーツァルト"},{w:"ベートーベン"},{w:"ニュートン"},{w:"ガリレオ"},{w:"マザー・テレサ"},{w:"チャーチル"},{w:"ガンジー"},{w:"マリー・キュリー"},{w:"スティーブ・ジョブズ"},{w:"ピカソ"},{w:"マイケル・ジャクソン"},{w:"チャップリン"}],"神話・伝説":[{w:"龍",r:"りゅう"},{w:"鬼",r:"おに"},{w:"天狗",r:"てんぐ"},{w:"河童",r:"かっぱ"},{w:"人魚",r:"にんぎょ"},{w:"妖精",r:"ようせい"},{w:"ドラゴン"},{w:"ユニコーン"},{w:"ゾンビ"},{w:"バンパイア"},{w:"狼男",r:"おおかみおとこ"},{w:"鳳凰",r:"ほうおう"},{w:"フェニックス"},{w:"ケルベロス"},{w:"メデューサ"},{w:"妖怪",r:"ようかい"},{w:"雪女",r:"ゆきおんな"},{w:"座敷童",r:"ざしきわらし"}],"エンタメ・文化":[{w:"アニメ"},{w:"マンガ",fk:"漫画"},{w:"映画",r:"えいが"},{w:"ドラマ"},{w:"ミュージカル"},{w:"コンサート"},{w:"ライブ"},{w:"ポップス"},{w:"ジャズ"},{w:"クラシック"},{w:"ヒップホップ"},{w:"ロック"},{w:"バレエ"},{w:"サーカス"},{w:"落語",r:"らくご"},{w:"歌舞伎",r:"かぶき"},{w:"茶道",r:"さどう"},{w:"書道",r:"しょどう"},{w:"俳句",r:"はいく"},{w:"フラダンス"},{w:"ブレイクダンス"},{w:"ヨガ"}],"ファッション":[{w:"スーツ"},{w:"着物",r:"きもの"},{w:"ドレス"},{w:"デニム"},{w:"スニーカー"},{w:"ハイヒール"},{w:"サングラス"},{w:"マフラー"},{w:"ネクタイ"},{w:"ベレー帽",r:"ベレーぼう"},{w:"ビキニ"},{w:"パーカー"},{w:"トレンチコート"},{w:"タキシード"},{w:"浴衣",r:"ゆかた"},{w:"振袖",r:"ふりそで"}]};
+const BOT_DICT={"富士山":["峰:日本一高い頂上","雪:万年雪をいただく","霊:霊峰と呼ばれる","白:雪化粧の白さ","神:神聖な山","岩:溶岩の岩肌","崇:崇高な存在","仰:仰ぎ見る山","絶:絶景が広がる","孤:孤高にそびえる","秀:秀麗な山容","霞:霞がかかる"],"海岸":["波:打ち寄せる波","砂:砂浜","潮:潮の香り","岩:岩礁","磯:磯の香り","渚:渚を歩く","浜:浜辺","崖:海食崖","断:断崖絶壁","蒼:蒼い海","飛:飛沫が上がる","砕:波が砕ける"],"森林":["緑:深い緑","陰:木陰","葉:落ち葉","苔:苔むす地面","霧:霧が立ちこめる","鬱:鬱蒼と茂る","菌:キノコが生える","腐:腐葉土","幽:幽玄な雰囲気","杉:杉の木立","蔦:蔦が絡まる","巨:巨木"],"砂漠":["乾:乾燥地帯","渇:水が渇く","蜃:蜃気楼","灼:灼熱の太陽","孤:孤独な旅","砂:砂の大地","丘:砂丘","曠:曠野に広がる","星:星が美しい夜","骨:白骨化した骨","征:砂漠を征く","荒:荒涼とした"],"滝":["轟:轟音","落:水が落ちる","瀑:滝の別名","飛:飛沫が飛ぶ","虹:滝に虹がかかる","冷:冷たい水しぶき","急:急流","岩:岩を伝う","清:清らかな水","壮:壮大な景観","奔:奔流","激:激しい流れ"],"虹":["七:七色","弧:弧を描く","雨:雨上がりに出る","霓:副虹","架:橋を架けるよう","淡:淡い色合い","幻:幻のように消える","祝:幸運の兆し","跨:空に跨る","瞬:瞬く間に消える","曲:曲線を描く","彩:色彩豊か"],"雷":["轟:轟音","閃:稲妻が閃く","震:大地が震える","怖:恐ろしい","嵐:嵐の前兆","鳴:鳴り響く","裂:空を裂く","轍:轍のように","猛:猛烈な雷雨","瞬:一瞬の閃光","落:落雷","劈:大気を劈く"],"台風":["暴:暴風雨","渦:渦巻き","猛:猛烈","接:接近","避:避難","上陸:上陸する","破:建物を破壊","荒:海が荒れる","備:備えが必要","瞬:瞬く間に発達","眼:台風の眼","巨:巨大な渦"],"梅雨":["湿:湿気","霧:霧雨","鬱:気持ちが鬱","傘:傘が手放せない","長:長雨","紫:紫陽花が咲く","蒸:蒸し暑い","黴:黴が生えやすい","滴:水滴が落ちる","憂:憂鬱な季節","霞:霞がかかる","潤:大地が潤う"],"初雪":["白:白銀","冬:冬の訪れ","純:純白","舞:雪が舞う","積:雪が積もる","静:静寂な世界","幽:幽玄な景色","覆:大地を覆う","柔:柔らかな雪","粉:粉雪","儚:儚く溶ける","凛:凛とした冷たさ"],"太陽":["熱:熱エネルギー","輝:輝く","恵:恵みをもたらす","暖:暖かさ","昇:昇る太陽","沈:夕暮れに沈む","灼:肌を灼く","万:万物を照らす","紅:紅い夕日","眩:眩しい","核:核融合","燃:燃え続ける"],"月":["照:月明かり","潮:潮の満ち引き","望:望月","朧:朧月夜","満:満月","欠:欠ける月","銀:銀色に輝く","幽:幽かな明かり","遠:遠い星","引:引力","静:静かな夜","宵:宵の月"],"地球":["丸:球体","緑:緑の星","命:命が宿る","青:青い惑星","廻:自転・公転","磁:磁場","覆:大気が覆う","海:海が広がる","陸:大陸","営:生命が営む","母:母なる大地","守:守るべき星"],"銀河":["渦:渦巻き銀河","宙:宇宙","塵:星間塵","億:億の星","螺:螺旋状","暗:暗黒物質","壮:壮大なスケール","眺:遥かな眺め","瞬:瞬く星々","幽:幽玄な宇宙","旋:旋回する","孤:孤独な旅"],"流星":["瞬:一瞬で消える","願:願いを込める","焼:大気で燃え尽きる","夜:夜空を駆ける","速:猛スピード","痕:流星痕","曳:尾を曳く","燦:燦然と輝く","刹:刹那の輝き","儚:儚い命","奔:奔走する","弧:弧を描く"],"狐":["狡:狡賢い","化:化ける伝説","尾:ふさふさの尾","縁:稲荷神の使い","狩:巧みに狩る","嗅:鋭い嗅覚","橙:橙色の毛","鋭:鋭い耳","惑:人を惑わす","謀:謀略を巡らす","古:古狐","幻:幻を見せる"],"猫":["爪:鋭い爪","毛:柔らかい毛","甘:甘える","独:独立心が強い","柔:柔軟な体","忍:忍び足","丸:丸くなって眠る","伸:伸びをする","警:警戒心","縄:縄張りを持つ","艶:艶やかな毛","瞳:縦長の瞳"],"犬":["忠:忠実","吠:吠える","鼻:嗅覚","番:番犬","尾:尻尾を振る","従:従順","嗅:嗅ぎまわる","駆:駆け回る","護:護衛する","仲:仲良し","懐:懐く","愛:愛される"],"象":["巨:巨体","鼻:長い鼻","牙:大きな牙","群:群れで生活","記:記憶力が高い","厚:厚い皮膚","踏:大地を踏みしめる","長:長命","賢:賢い","悼:仲間を悼む","猛:猛進","灰:灰色の肌"],"虎":["縞:縞模様","猛:猛々しい","爪:鋭い爪","咆:咆哮","密:密林に棲む","孤:単独行動","鋭:鋭い牙","跳:跳びかかる","威:威圧感","俊:俊敏な動き","獰:獰猛","百:百獣の王"],"ライオン":["鬣:たてがみ","群:プライド","咆:咆哮","草:草原","誇:誇り高い","威:威厳","牙:鋭い牙","雄:雄々しい","傲:傲然とした","睥:睥睨する","狩:狩りをする","百:百獣の王"],"パンダ":["竹:竹を食べる","稀:希少種","愛:愛くるしい","丸:丸い体","悠:悠然としている","穏:穏やかな性格","胖:ふっくらした体","眠:よく眠る","孤:孤高の存在","匹:少ない個体数","笹:笹を食べる","幼:幼い顔立ち"],"イルカ":["賢:知能が高い","跳:跳ねる","群:群れで泳ぐ","笑:笑顔に見える","鳴:声でコミュニケーション","遊:遊ぶのが好き","俊:俊敏な動き","波:波乗り","親:人懐っこい","超:超音波を使う","躍:躍動感","協:協力して狩る"],"クジラ":["巨:巨大","潜:深海に潜る","歌:クジラの歌","噴:潮吹き","回:回遊する","悠:悠然と泳ぐ","深:深海","孤:孤独に泳ぐ","長:長命","哺:哺乳類","温:温かい血","遥:遥かな旅"],"寿司":["鮮:新鮮な魚","酢:酢飯","旬:旬の食材","握:握り寿司","匠:職人の匠","刃:包丁の刃","光:光物の魚","脂:脂の乗った魚","艶:艶やかな魚","桶:寿司桶","赤:赤身の魚","丁:丁寧な仕事"],"天ぷら":["揚:揚げ料理","衣:衣をつける","旬:旬の野菜","軽:軽い食感","油:油で揚げる","熱:熱々","塩:天塩でいただく","音:揚げる音","透:衣が透ける","串:串に刺した","香:香ばしい","鮮:鮮やかな色"],"焼肉":["煙:煙が出る","炭:炭火焼き","香:肉の香り","宴:宴会","脂:脂が滴る","赤:赤い肉","網:網で焼く","焦:焦げ目がつく","旨:旨み","祝:お祝いの席","豪:豪快に食べる","噛:噛みしめる"],"刺身":["鮮:新鮮な魚","醤:醤油で食べる","旬:旬の魚","薄:薄く切る","桜:桜の花びらのよう","艶:艶やかな身","透:身が透き通る","甘:甘みのある魚","脂:脂が乗る","藻:藻の上に盛る","剣:剣のように薄く","匠:職人の技"],"ラーメン":["麺:麺料理","汁:スープ","濃:濃厚な味","湯:湯気が立つ","脂:脂が浮く","旨:旨みたっぷり","煮:じっくり煮込む","香:香りが立つ","弾:弾力ある麺","炙:チャーシューを炙る","豚:豚骨スープ","醤:醤油ベース"],"カレー":["辛:スパイシー","香:香辛料","黄:黄色い色","煮:じっくり煮る","奥:奥深い味","炒:玉ねぎを炒める","磨:スパイスを磨る","汗:汗をかく辛さ","溶:ルーが溶ける","混:スパイスを混ぜる","旨:旨み深い","秘:秘伝のレシピ"],"サッカー":["蹴:ボールを蹴る","球:丸いボール","網:ゴールネット","陣:陣地取り","走:走り回る","跳:ヘディング","競:競い合う","闘:闘志","俊:俊敏な動き","戦:戦術","勝:勝利","統:チームの統率"],"野球":["投:投球","打:打撃","塁:塁を走る","捕:捕球","守:守備","策:作戦","飛:飛球","滑:スライディング","伸:腕を伸ばす","狙:狙い球","渾:渾身の一投","弾:弾丸ライナー"],"柔道":["礼:礼節","投:投げ技","締:締め技","抑:抑え込み","捌:体を捌く","払:足払い","崩:体勢を崩す","捻:捻り技","極:関節を極める","礼:一礼から始まる","道:武道の道","袖:袖を掴む"],"マラソン":["耐:耐久力","継:継続","汗:汗をかく","完:完走","苦:苦しい中盤","呼:呼吸を整える","踏:大地を踏む","疾:疾走","孤:孤独な戦い","脚:脚力","執:執念","極:極限状態"],"スキー":["滑:滑走","斜:急斜面","冬:冬のスポーツ","粉:粉雪","飛:ジャンプ台から飛ぶ","疾:疾走","白:白銀の世界","彫:雪面を彫るように","磨:磨かれた技術","急:急降下","爽:爽快感","転:転倒"],"新幹線":["弾:弾丸列車","俊:俊足","振:振り子式","窓:窓から景色","静:静粛性","先:先頭車両","翼:翼のような形","隧:トンネルを抜ける","轟:走る音","滑:滑らかな走行","旅:旅の足","縦:日本縦断"],"飛行機":["翼:大きな翼","雲:雲の上","轟:轟音","昇:上昇","窓:窓から景色","国:国際線","浮:浮き上がる","揚:揚力","旋:旋回","着:着陸","轍:飛行機雲","遥:遥か彼方へ"],"ロケット":["噴:噴射","炎:炎を噴く","宙:宇宙へ","轟:轟音","鋭:鋭い機体","突:突き刺すように","貫:大気を貫く","振:振動","逃:重力を逃れる","脱:大気圏を脱する","挑:宇宙に挑む","孤:孤独な飛行"],"医者":["治:病を治す","聴:聴診器","命:命を救う","薬:薬を処方","診:診察する","縫:傷を縫う","徹:徹夜で手術","救:救命","鋭:鋭い目","冷:冷静な判断","誓:誓いを守る","献:患者に献身"],"消防士":["炎:炎と戦う","救:人命救助","危:危険な現場","放:放水する","煙:煙の中へ","勇:勇気","梯:梯子を登る","轟:轟音の中","破:扉を破る","命:命がけ","熱:熱い現場","献:献身的"],"探偵":["謎:謎を解く","推:推理","観:鋭い観察","証:証拠を集める","潜:潜入調査","影:影のように追う","暴:真実を暴く","洞:洞察力","煙:煙幕を張る","夜:夜に行動","尾:尾行する","迫:真相に迫る"],"侍":["刀:刀を持つ","忠:主君に忠義","切:切腹","武:武士道","礼:礼節","凛:凛とした立ち姿","誇:誇りを持つ","騎:馬に乗る","盾:盾となる","鍛:刀を鍛える","魂:刀に魂を込める","散:潔く散る"],"忍者":["隠:隠密行動","闇:闇に紛れる","術:忍術","影:影のように","俊:素早い動き","潜:潜伏する","遁:遁走術","縄:縄を使う","刃:手裏剣","翻:素早く翻る","欺:敵を欺く","幻:幻惑させる"],"海賊":["略:略奪","宝:宝探し","旗:海賊旗","荒:荒くれ者","嵐:嵐の海","帆:帆を張る","剣:剣を振る","眼:眼帯","呪:呪われた財宝","冒:冒険","刺:入れ墨","自:自由な航海"],"学校":["鐘:チャイム","門:校門","規:校則","育:教育","友:友達","試:試験","黒:黒板","鉛:鉛筆","机:机を並べる","蛍:蛍光灯","喧:賑やか","卒:卒業"],"神社":["鳥:鳥居","祀:神を祀る","縄:しめ縄","祈:祈り","参:参拝","御:御神体","幣:玉串","清:清め","依:神が依り宿る","森:鎮守の森","狐:お稲荷さん","響:鈴の音"],"城":["石:石垣","天:天守閣","堀:お堀","守:防衛","戦:戦の舞台","落:落城","威:威厳","歴:歴史の証人","雅:優雅な建物","風:風格","覇:覇者の象徴","攻:攻め落とす"],"温泉":["湯:温かい湯","癒:癒し","湧:湧き出る","硫:硫黄の香り","露:露天風呂","裸:裸で入浴","白:白い湯煙","治:療養","霧:湯煙が霧のよう","旅:旅の疲れを癒す","源:源泉","浸:湯に浸かる"],"愛":["温:温かい気持ち","深:深い絆","捧:捧げる心","慈:慈しむ","誓:誓い","永:永遠に","包:包み込む","盲:盲目的な","芽:芽生える","貫:貫き通す","育:育む","献:尽くす"],"夢":["叶:夢が叶う","遥:遥か彼方","眠:眠り","幻:幻のよう","追:追い続ける","描:夢を描く","壮:壮大な夢","儚:儚い夢","奔:夢に向かって奔走","抱:夢を抱く","破:夢が破れる","輝:輝く未来"],"希望":["光:希望の光","芽:芽が出る","先:先に続く道","灯:灯りをともす","開:道が開ける","萌:萌え出る","暁:暁のように","照:照らす","抱:希望を抱く","揺:揺るぎない","待:待ち望む","晴:晴れやかな"],"勇気":["挑:挑戦","克:克服","立:立ち向かう","鼓:鼓舞","奮:奮い立つ","貫:貫き通す","覚:覚悟を決める","突:突き進む","震:震える足で進む","燃:燃える闘志","砕:困難を砕く","敢:敢然と立ち向かう"],"花見":["散:花びらが散る","宴:宴会","酒:お酒を飲む","儚:儚い命","霞:霞がかかる","酔:酔いしれる","薄:薄いピンク","雅:雅な光景","敷:花びらが敷き詰まる","眺:眺める","揺:風に揺れる","誘:誘われる"],"花火":["夜:夜空に咲く","輝:輝く光","轟:轟音","散:散る美しさ","儚:儚い輝き","歓:歓声","彩:色彩豊か","玉:打ち上げ玉","映:水面に映る","夏:夏の風物詩","煙:煙が残る","弾:弾けるように"],"七夕":["織:織姫","彦:彦星","短:短冊","天:天の川","願:願いを込める","逢:年に一度逢う","笹:笹に飾る","星:星に願いを","渡:川を渡る","糸:機織りの糸","涙:雨は涙","彩:色とりどりの飾り"],"読書":["没:本に没入","想:想像の世界","静:静かに読む","頁:ページをめくる","染:心に染み入る","沈:物語に沈む","旅:本の中の旅","紙:紙の香り","啓:啓発される","睡:眠くなる","蛍:蛍の光で読む","積:積読"],"桜":["散:散る美しさ","儚:儚い命","淡:淡いピンク","宴:花見","霞:霞のような","吹:風に吹かれる","舞:花びらが舞う","染:桜色に染まる","惜:散るのが惜しい","薄:薄紅色","吹雪:桜吹雪","爛:爛漫と咲く"],"梅":["香:香りが良い","先:桜より先に咲く","凛:凛と咲く","寒:寒い中で咲く","実:梅の実","酸:梅干しの酸味","雪:雪の中で咲く","節:節分の頃","白:白梅","紅:紅梅","忍:寒さに忍耐","春:春を告げる"],"竹":["節:節がある","直:真っ直ぐ伸びる","剛:しなやかで強い","中:中が空洞","青:青々とした","割:割れやすい","刀:刀の素材","笛:竹笛","籠:竹かご","繁:繁茂する","伸:ぐんぐん伸びる","軽:軽くて強い"],"龍":["鱗:うろこ","天:天に昇る","雲:雲を操る","皇:皇帝の象徴","渦:渦を巻く","猛:猛々しい","飛:天を飛ぶ","爪:鋭い爪","巨:巨大な体","霊:霊験あらたか","轟:轟く声","威:威圧的な存在"],"鬼":["角:角がある","豆:豆で退治","鬼:恐ろしい","地:地獄の番人","力:怪力","猛:猛々しい","魂:魂を奪う","闇:闇から現れる","裂:裂けた口","追:追い払う","宿:宿る","凄:凄まじい"],"ドラゴン":["炎:炎を吐く","鱗:鱗の体","宝:宝を守る","猛:猛々しい","空:空を飛ぶ","巨:巨大","爪:鋭い爪","翼:大きな翼","轟:轟く声","魔:魔の存在","威:威圧的","覇:覇者"],"アニメ":["声:声優","感:感動","夢:夢のある世界","絵:絵が動く","泣:泣ける","笑:笑える","設:世界観の設定","萌:萌えるキャラ","熱:熱い展開","謎:謎が深まる","共:共感する","続:続きが気になる"],"落語":["笑:笑いを生む","語:語りの芸","扇:扇子一本","江:江戸の芸","師:師匠","高:高座","座:座って演じる","粋:粋な話","噺:お噺","間:絶妙な間","艶:艶笑話","師:師弟関係"],"歌舞伎":["華:華やかな衣装","伝:伝統芸能","男:男性が演じる","隈:隈取り","見:見得を切る","荒:荒事","柔:和事","幕:幕が開く","義:義太夫","揚:揚げ幕","絢:絢爛豪華","型:型の芸"],"着物":["絹:絹の生地","和:和の美","帯:帯を締める","染:染め物","袖:大きな袖","柄:美しい柄","結:帯を結ぶ","纏:体に纏う","艶:艶やかな","裾:裾を引く","衿:衿を合わせる","袂:袂を分かつ"],"浴衣":["夏:夏の装い","祭:夏祭りで着る","綿:綿素材","涼:涼しげ","帯:帯を結ぶ","下駄:下駄を履く","縁:縁台に腰掛ける","揺:裾が揺れる","涼:涼やか","花:花柄","艶:艶やか","宵:宵の祭り"]};
+const GENRE_DEFAULT={"自然・地形":[["峻","険しい自然"],["原","広大な原野"],["渓","渓谷の美"],["嶺","山の嶺"],["湧","湧き出る泉"]],"動物":[["獣","野生の獣"],["棲","棲み処"],["俊","俊敏な動物"],["雌","雌雄の違い"],["縄","縄張り"]],"食べ物":[["旨","旨味"],["膳","膳の上"],["炊","炊きたて"],["滋","滋養"],["箸","箸で食べる"]],"スポーツ":[["闘","闘志"],["俊","俊敏さ"],["競","競い合う"],["汗","汗をかく"],["勝","勝利"]],"乗り物":[["旅","旅の手段"],["轍","轍を残す"],["疾","疾走する"],["往","往来する"],["路","道を行く"]],"職業":[["誇","誇り"],["専","専門性"],["匠","匠の技"],["熟","熟練"],["献","社会への貢献"]],"場所・施設":[["集","人が集まる"],["賑","賑わう"],["往","往来する"],["栄","栄える"],["訪","訪れる"]],"感情・概念":[["魂","魂から"],["抱","胸に抱く"],["揺","揺れ動く"],["秘","秘めた感情"],["滲","滲み出る"]],"季節・行事":[["暦","暦の節目"],["宴","宴を催す"],["彩","彩り豊か"],["賑","賑わう"],["憩","憩いの場"]],"趣味・活動":[["熱","熱中する"],["没","没頭する"],["極","極める"],["磨","腕を磨く"],["興","興じる"]],"植物・花":[["咲","花が咲く"],["薫","薫り立つ"],["萌","萌え出る"],["繁","繁茂する"],["結","実を結ぶ"]],"テクノロジー":[["革","革新"],["精","精密"],["演","演算"],["繋","繋がる"],["拓","未来を拓く"]],"国・地域":[["風","風土"],["歴","歴史"],["誇","誇りある文化"],["訪","訪れたい"],["異","異文化"]],"偉人":[["功","功績"],["志","志"],["貫","信念を貫く"],["覚","覚悟"],["残","後世に残す"]],"神話・伝説":[["幻","幻の存在"],["霊","霊的な力"],["畏","畏怖"],["謎","謎めいた"],["異","異形の存在"]],"エンタメ・文化":[["感","感動"],["創","創造"],["華","華やか"],["熱","熱狂"],["魅","魅了する"]],"ファッション":[["装","装い"],["艶","艶やか"],["粋","粋な"],["彩","彩り"],["纏","身に纏う"]]};
+
+const SIMILAR_GROUPS=[['海','波','潮','浜','浦','洋','湾','渚'],['山','峰','岳','嶺','丘','坂','崖','谷'],['火','炎','燃','熱','煙','灼','焔','灯'],['水','川','河','流','泳','濡','潤','湿'],['空','天','雲','風','晴','霞'],['光','輝','煌','照','晴','明'],['暗','黒','闇','陰','影','暮','夜','深'],['速','疾','迅','急','猛','走','飛','翔'],['緑','草','葉','森','木','茂','萌','翠'],['白','雪','純','清','淡','霜','銀','氷'],['赤','紅','朱','緋','血','情'],['強','力','剛','猛','鉄','鋼','硬','頑'],['静','穏','和','平','安','寂','閑'],['古','旧','昔','歴','史','遺','老'],['新','革','創','未','先','初','若','芽'],['愛','恋','慈','情','絆','縁','想'],['喜','楽','嬉','幸','歓','笑','悦','満'],['悲','涙','哀','嘆','憂','苦','痛','沈'],['食','味','旨','香','甘','辛','苦','酸'],['技','術','巧','妙','精','熟','鍛','錬']];
+const GENERIC_KANJI=new Set(['技','感','創','伝','楽','夢','想','美','力','心','命','道','気','光','水','火','風','木','空','地','野','動','静','深','広','速','強','古','新','遠','高']);
+
+function getSimilarBlocked(usedKanjis){const blocked=new Set();usedKanjis.forEach(k=>{SIMILAR_GROUPS.forEach(g=>{if(g.includes(k))g.forEach(m=>blocked.add(m));});});return blocked;}
+function scoreCandidate(kanji,entry){let score=10;if(GENERIC_KANJI.has(kanji))score-=4;if(entry.w.length<=2)score+=2;return score;}
+function botPickKanji(entry,usedKanjis){const forbidden=getForbiddenChars(entry);const hardBlock=new Set([...forbidden,...usedKanjis]);const softBlock=getSimilarBlocked(usedKanjis);const de=BOT_DICT[entry.w];if(de){const all=de.map(s=>{const[k,r]=s.split(':');return{kanji:k,reason:r};});const strict=all.filter(c=>!hardBlock.has(c.kanji)&&!softBlock.has(c.kanji));if(strict.length>0){const scored=strict.map(c=>({...c,score:scoreCandidate(c.kanji,entry)}));const total=scored.reduce((s,c)=>s+c.score,0);let rand=Math.random()*total;for(const c of scored){rand-=c.score;if(rand<=0)return{kanji:c.kanji,reason:c.reason};}return{kanji:scored[0].kanji,reason:scored[0].reason};}const loose=all.filter(c=>!hardBlock.has(c.kanji));if(loose.length>0){const scored=loose.map(c=>({...c,score:scoreCandidate(c.kanji,entry)}));const total=scored.reduce((s,c)=>s+c.score,0);let rand=Math.random()*total;for(const c of scored){rand-=c.score;if(rand<=0)return{kanji:c.kanji,reason:c.reason};}return{kanji:scored[0].kanji,reason:scored[0].reason};}}const gd=GENRE_DEFAULT[entry.genre]||[];const gdStrict=gd.filter(([k])=>!hardBlock.has(k)&&!softBlock.has(k)&&!GENERIC_KANJI.has(k));if(gdStrict.length>0){const p=gdStrict[Math.floor(Math.random()*gdStrict.length)];return{kanji:p[0],reason:p[1]};}const gdLoose=gd.filter(([k])=>!hardBlock.has(k));if(gdLoose.length>0){const p=gdLoose[Math.floor(Math.random()*gdLoose.length)];return{kanji:p[0],reason:p[1]};}const l=['輝','穏','遥','縁','響','幻','奥','煌','秘','澄','雄','峻','誉','慈','翔','尊','艶','妙','雅','粋'];return{kanji:l.find(c=>!hardBlock.has(c))||'志',reason:'お題から連想'};}
+
+const GENRE_LABELS=Object.keys(ALL_TOPICS);
+const AV_COLORS=[{bg:'#DEBD82',fg:'#4A2E0E'},{bg:'#A8CC8E',fg:'#1C3A10'},{bg:'#EEA588',fg:'#5C1E0C'},{bg:'#96BEDC',fg:'#0E2A4A'},{bg:'#DCA0C0',fg:'#4A1030'},{bg:'#B8A0DC',fg:'#2E1050'}];
+const BOT_NAMES=['AIくん','AIちゃん'];
+let selectedGenres=new Set(GENRE_LABELS),humanPlayers=[],playerPlaceholders=[],botCount=0,roundIndex=0;
+let firstAnswererIdx=0;
+let correctCount=0,streakCount=0;
+let currentEntry=null,hints=[],currentHintIdx=0;
+let timerMax=60,hintTimerMax=30,timerLeft=60,hintTimerLeft=30;
+let timerInterval=null,hintTimerInterval=null,passNextFn=null,currentQs=[];
+
+function answererIndex(){return roundIndex%humanPlayers.length;}
+function questioners(){const ai=answererIndex(),qs=[];humanPlayers.forEach((p,i)=>{if(i!==ai)qs.push({name:p,isBot:false,playerIdx:i});});for(let b=0;b<botCount;b++)qs.push({name:BOT_NAMES[b],isBot:true});return qs;}
+function isKanji(c){return/[\u4E00-\u9FFF\u3400-\u4DBF]/.test(c);}
+function getKanjiChars(str){return[...str].filter(c=>isKanji(c));}
+function getForbiddenChars(entry){const extra=entry.fk?getKanjiChars(entry.fk):[];return[...new Set([...getKanjiChars(entry.w),...extra])];}
+function showScreen(id){if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');const h=document.getElementById('hanko');h.style.opacity=id==='s-title'?'0.75':'0.35';window.scrollTo(0,0);requestAnimationFrame(()=>window.scrollTo(0,0));setTimeout(()=>window.scrollTo(0,0),50);}
+function topicDisplayHTML(entry,size='28px'){const{w,r}=entry,hasK=[...w].some(c=>isKanji(c));if(hasK&&r)return`<div class="topic-ruby-wrap"><span class="topic-ruby-rt">${r}</span><span style="font-size:${size};font-weight:700;color:var(--text-primary);letter-spacing:2px;">${w}</span></div>`;return`<span style="font-size:${size};font-weight:700;color:var(--text-primary);letter-spacing:2px;">${w}</span>`;}
+function buildGenreGrid(){const g=document.getElementById('genre-grid');g.innerHTML='';GENRE_LABELS.forEach(gl=>{const s=selectedGenres.has(gl),b=document.createElement('button');b.className='genre-btn'+(s?' selected':'');b.innerHTML=`<span class="check-icon">✓</span><span>${gl}</span>`;b.onclick=()=>{if(selectedGenres.has(gl)){if(selectedGenres.size>1)selectedGenres.delete(gl);}else selectedGenres.add(gl);buildGenreGrid();updateGenreAllBtn();};g.appendChild(b);});}
+function buildFirstAnswererGrid(){const g=document.getElementById('first-answerer-grid');g.innerHTML='';if(firstAnswererIdx>=humanPlayers.length)firstAnswererIdx=0;humanPlayers.forEach((name,idx)=>{const s=idx===firstAnswererIdx,b=document.createElement('button');b.className='genre-btn'+(s?' selected':'');b.innerHTML=`<span class="check-icon">✓</span><span>${name}</span>`;b.onclick=()=>{firstAnswererIdx=idx;buildFirstAnswererGrid();};g.appendChild(b);});}
+function updateGenreAllBtn(){document.getElementById('btn-genre-all').textContent=selectedGenres.size===GENRE_LABELS.length?'すべて解除':'すべて選択';}
+function toggleAllGenres(){selectedGenres=selectedGenres.size===GENRE_LABELS.length?new Set([GENRE_LABELS[0]]):new Set(GENRE_LABELS);buildGenreGrid();updateGenreAllBtn();}
+function openSoloModal(){const g=document.getElementById('solo-genre-grid');g.innerHTML='';GENRE_LABELS.forEach(gl=>{const b=document.createElement('button');b.className='solo-genre-btn';b.textContent=gl;b.onclick=()=>{selectedGenres=new Set([gl]);buildGenreGrid();updateGenreAllBtn();closeSoloModal();};g.appendChild(b);});document.getElementById('solo-modal').classList.add('open');}
+function closeSoloModal(){document.getElementById('solo-modal').classList.remove('open');}
+function handleModalClick(e){if(e.target===document.getElementById('solo-modal'))closeSoloModal();}
+function pickEntry(){const pool=[];selectedGenres.forEach(g=>{if(ALL_TOPICS[g])ALL_TOPICS[g].forEach(e=>pool.push({...e,genre:g}));});return pool[Math.floor(Math.random()*pool.length)];}
+function initPlayers(){humanPlayers=['','']; playerPlaceholders=['プレイヤー1','プレイヤー2'];botCount=0;renderPlayerList();renderBotList();buildGenreGrid();updateGenreAllBtn();}
+function renderPlayerList(){const el=document.getElementById('player-list');el.innerHTML='';humanPlayers.forEach((n,i)=>{const ph=playerPlaceholders[i]||('プレイヤー'+(i+1));const c=AV_COLORS[i%AV_COLORS.length],r=document.createElement('div');r.className='player-row';r.innerHTML=`<div class="player-avatar" style="width:36px;height:36px;background:${c.bg};color:${c.fg};font-size:13px;border:1px solid ${c.fg}33;">${(n||ph)[0]||'?'}</div><input class="player-name-input" value="${n}" maxlength="10" placeholder="${ph}" oninput="humanPlayers[${i}]=this.value;this.previousElementSibling.textContent=(this.value||this.placeholder)[0]||'?';"/>`;el.appendChild(r);});document.getElementById('btn-remove').disabled=humanPlayers.length<=2;document.getElementById('btn-add').disabled=humanPlayers.length>=6;}
+function addPlayer(){if(humanPlayers.length>=6)return;humanPlayers.push('');playerPlaceholders.push('プレイヤー'+(humanPlayers.length));renderPlayerList();}
+function removePlayer(){if(humanPlayers.length<=2)return;humanPlayers.pop();playerPlaceholders.pop();renderPlayerList();}
+function goToGameSettings(){const inputs=document.querySelectorAll('.player-name-input');humanPlayers=Array.from(inputs).map((i,idx)=>i.value.trim()||i.placeholder||('プレイヤー'+(idx+1)));buildFirstAnswererGrid();showScreen('s-setup-game');}
+function renderBotList(){const el=document.getElementById('bot-list');el.innerHTML='';for(let b=0;b<botCount;b++){const r=document.createElement('div');r.className='player-row';r.innerHTML=`<div class="player-avatar" style="width:36px;height:36px;background:#DCB8F0;color:#4A0E80;font-size:16px;border:1px solid #A855D644;">🤖</div><span style="flex:1;font-size:14px;color:var(--text-primary);padding:0 12px;">${BOT_NAMES[b]}</span><span class="badge badge-bot">AI出題者</span>`;el.appendChild(r);}document.getElementById('btn-add-bot').disabled=botCount>=2;document.getElementById('btn-remove-bot').disabled=botCount<=0;}
+function addBot(){if(botCount>=2)return;botCount++;renderBotList();}
+function removeBot(){if(botCount<=0)return;botCount--;renderBotList();}
+function startGame(){timerMax=parseInt(document.getElementById('timer-slider').value);hintTimerMax=parseInt(document.getElementById('hint-timer-slider').value);roundIndex=firstAnswererIdx;correctCount=0;streakCount=0;newRound();}
+function newRound(){currentEntry=pickEntry();hints=[];currentHintIdx=0;currentQs=questioners();showRoundStart();}
+function showRoundStart(){showScreen('s-round-start');document.getElementById('rs-round-label').textContent=`ラウンド ${roundIndex+1}`;const ai=answererIndex(),an=humanPlayers[ai],c=AV_COLORS[ai%AV_COLORS.length];document.getElementById('rs-answerer').innerHTML=`<div class="player-avatar" style="width:40px;height:40px;background:${c.bg};color:${c.fg};font-size:15px;border:1px solid ${c.fg}44;">${an[0]||'?'}</div><div><p style="font-size:15px;font-weight:600;color:var(--text-primary);margin:0;">${an}</p><span class="badge badge-warning" style="margin-top:4px;">回答者</span></div>`;const qEl=document.getElementById('rs-questioners');qEl.innerHTML='';currentQs.forEach((q,o)=>{const r=document.createElement('div');r.style.cssText='display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px dashed var(--card-border);';const av=q.isBot?`<div class="player-avatar" style="width:32px;height:32px;background:#DCB8F0;color:#4A0E80;font-size:14px;border:1px solid #A855D644;">🤖</div>`:(()=>{const c2=AV_COLORS[(q.playerIdx||0)%AV_COLORS.length];return`<div class="player-avatar" style="width:32px;height:32px;background:${c2.bg};color:${c2.fg};font-size:12px;border:1px solid ${c2.fg}33;">${q.name[0]||'?'}</div>`;})();const ba=q.isBot?`<span class="badge badge-bot" style="margin-left:auto;">AI bot</span>`:`<span class="badge badge-info" style="margin-left:auto;">出題者</span>`;r.innerHTML=`<span style="font-size:12px;color:var(--text-muted);min-width:18px;text-align:center;">${o+1}</span>${av}<span style="font-size:14px;color:var(--text-primary);">${q.name}</span>${ba}`;qEl.appendChild(r);});}
+function beginRound(){advanceToQuestioner(0);}
+function advanceToQuestioner(qO){if(qO>=currentQs.length){showPassForAnswerer();return;}const q=currentQs[qO];q.isBot?showBotTurn(qO):showPassForQuestioner(qO,qO===0);}
+function showPassForQuestioner(qO,isFirst){clearInterval(hintTimerInterval);showScreen('s-pass');const n=currentQs[qO].name;document.getElementById('pass-next').textContent=isFirst?n+' さん':'次は '+n+' さん';document.getElementById('pass-desc').textContent=isFirst?'スマホを受け取って、お題を確認してください。':'スマホを渡してください。';document.getElementById('pass-btn').textContent=isFirst?'お題を見る':'漢字を入力する';passNextFn=()=>showHintTurn(qO);}
+function showPassForAnswerer(){clearInterval(hintTimerInterval);showScreen('s-pass');const an=humanPlayers[answererIndex()];document.getElementById('pass-next').textContent=an+' さん';document.getElementById('pass-desc').textContent='スマホを受け取って、みんなの漢字を見てください。';document.getElementById('pass-btn').textContent='答えを見る';passNextFn=()=>showAnswerPhase();}
+function continuePass(){if(passNextFn)passNextFn();}
+function showBotTurn(qO){showScreen('s-bot-turn');const q=currentQs[qO];document.getElementById('bt-badge').innerHTML=`<span class="badge badge-info">出題者 ${qO+1}/${currentQs.length}</span>`;document.getElementById('bt-name').textContent=q.name+' が考えています…';document.getElementById('bt-status').textContent='お題から連想中…';document.getElementById('bt-thinking').style.display='flex';document.getElementById('bt-result-area').style.display='none';document.getElementById('bt-next-btn').style.display='none';setTimeout(()=>{const r=botPickKanji(currentEntry,hints.map(h=>h.kanji));document.getElementById('bt-thinking').style.display='none';document.getElementById('bt-result-area').style.display='block';document.getElementById('bt-kanji').textContent=r.kanji;document.getElementById('bt-reason').textContent=r.reason;document.getElementById('bt-status').textContent=q.name+' の漢字が決まりました！';document.getElementById('bt-name').textContent=q.name+' のヒント';const btn=document.getElementById('bt-next-btn');btn.style.display='block';btn.onclick=()=>{hints.push({player:q.name,kanji:r.kanji,reason:r.reason,isBot:true});advanceToQuestioner(qO+1);};},1200+Math.random()*800);}
+function renderForbidden(){const f=getForbiddenChars(currentEntry);document.getElementById('ht-forbidden').innerHTML=f.length>0?'<span style="font-size:11px;color:var(--text-muted);margin-right:4px;">使用禁止：</span>'+f.map(c=>`<span class="badge badge-danger">${c}</span>`).join(''):'';}
+function showHintTurn(qO){showScreen('s-hint-turn');currentHintIdx=qO;const q=currentQs[qO];document.getElementById('ht-badge').innerHTML=`<span class="badge badge-info">出題者 ${qO+1}/${currentQs.length}</span>`;document.getElementById('ht-name').textContent=q.name+' さんのターン';document.getElementById('ht-topic-display').innerHTML=topicDisplayHTML(currentEntry,'28px');document.getElementById('ht-genre-badge').textContent=currentEntry.genre;document.getElementById('ht-progress').textContent=`残り ${currentQs.length-qO} 人が漢字を入力します`;document.getElementById('kanji-error').textContent='';const inp=document.getElementById('kanji-input');inp.value='';inp.className='kanji-input-field';renderForbidden();document.getElementById('ht-reload-wrap').style.display=qO===0?'block':'none';startHintTimer(qO);inp.focus();}
+function startHintTimer(qO){clearInterval(hintTimerInterval);hintTimerLeft=hintTimerMax;updateHintTimerDisplay();hintTimerInterval=setInterval(()=>{hintTimerLeft--;updateHintTimerDisplay();if(hintTimerLeft<=0){clearInterval(hintTimerInterval);hints.push({player:currentQs[qO].name,kanji:'？',isBot:false});advanceToQuestioner(qO+1);}},1000);}
+function updateHintTimerDisplay(){const p=(hintTimerLeft/hintTimerMax)*100;document.getElementById('ht-timer-num').textContent=hintTimerLeft+'秒';const b=document.getElementById('ht-bar');b.style.width=p+'%';b.className='timer-bar'+(p<30?' danger':p<60?' warning':'');}
+function reloadTopic(){currentEntry=pickEntry();hints=[];document.getElementById('ht-topic-display').innerHTML=topicDisplayHTML(currentEntry,'28px');document.getElementById('ht-genre-badge').textContent=currentEntry.genre;renderForbidden();document.getElementById('kanji-input').value='';document.getElementById('kanji-input').className='kanji-input-field';document.getElementById('kanji-error').textContent='';startHintTimer(0);}
+function submitKanji(){const v=document.getElementById('kanji-input').value.trim(),e=document.getElementById('kanji-error'),i=document.getElementById('kanji-input');if(!v){e.textContent='漢字を入力してください';return;}if(!isKanji(v)){i.className='kanji-input-field err';e.textContent='漢字1文字のみ入力できます';i.value='';return;}const f=getForbiddenChars(currentEntry);if(f.includes(v)){i.className='kanji-input-field err';e.textContent=`「${v}」は使用禁止の漢字です。`;i.value='';return;}clearInterval(hintTimerInterval);i.className='kanji-input-field';e.textContent='';hints.push({player:currentQs[currentHintIdx].name,kanji:v,isBot:false});advanceToQuestioner(currentHintIdx+1);}
+function showAnswerPhase(){showScreen('s-answer');document.getElementById('ans-answerer-label').textContent=`回答者：${humanPlayers[answererIndex()]} さん`;document.getElementById('ans-genre-badge').textContent=currentEntry.genre;renderKanjiGrid('kanji-grid-display');timerLeft=timerMax;updateTimerDisplay();clearInterval(timerInterval);timerInterval=setInterval(()=>{timerLeft--;updateTimerDisplay();if(timerLeft<=0){clearInterval(timerInterval);showScreen('s-timeup');}},1000);}
+function finishTimeup(){judgeResult(false);}
+function updateTimerDisplay(){const p=(timerLeft/timerMax)*100;document.getElementById('ans-timer').textContent=timerLeft+'秒';const b=document.getElementById('ans-bar');b.style.width=p+'%';b.className='timer-bar'+(p<30?' danger':p<60?' warning':'');}
+function renderKanjiGrid(id,showReason=false){const el=document.getElementById(id);el.innerHTML='';hints.forEach(h=>{const c=document.createElement('div');c.className='kanji-card'+(h.isBot?' bot-card':'');c.innerHTML=`<div class="k-char">${h.kanji}</div><div class="k-name">${h.isBot?'🤖 ':''}${h.player}</div>${showReason&&h.isBot&&h.reason?`<div class="k-reason">${h.reason}</div>`:''}`; el.appendChild(c);});}
+function playResultEffect(correct){const showId=correct?'effect-correct':'effect-incorrect',hideId=correct?'effect-incorrect':'effect-correct';document.getElementById(hideId).classList.remove('show');const showEl=document.getElementById(showId);showEl.classList.remove('show');void showEl.offsetWidth;showEl.classList.add('show');}
+function judgeResult(correct){clearInterval(timerInterval);showScreen('s-result');const titleEl=document.getElementById('result-title');titleEl.textContent=correct?'正解':'不正解';titleEl.style.color=correct?'#D6241B':'#0F1EB0';playResultEffect(correct);if(correct){correctCount++;streakCount++;}else{streakCount=0;}document.getElementById('result-correct-count').textContent=correctCount;document.getElementById('result-streak-count').textContent=streakCount;document.getElementById('result-topic-display').innerHTML=topicDisplayHTML(currentEntry,'32px');document.getElementById('result-answerer-label').textContent=`回答者：${humanPlayers[answererIndex()]} さん`;renderKanjiGrid('result-kanji-grid',true);}
+function shufflePlayers(){for(let i=humanPlayers.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[humanPlayers[i],humanPlayers[j]]=[humanPlayers[j],humanPlayers[i]];}roundIndex=0;const el=document.getElementById('shuffle-result');el.style.display='block';el.textContent='順番：'+humanPlayers.join(' → ');}
+function nextRound(){roundIndex++;newRound();}
+initPlayers();showScreen('s-title');
+</script>
+</body>
+</html>
